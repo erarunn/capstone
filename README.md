@@ -1,69 +1,71 @@
-# YouTube Transcript Processor
+# YouTube Video Q&A System
 
-This project provides a clean and efficient pipeline for processing YouTube video transcripts, creating embeddings, and enabling semantic search and question answering capabilities.
+An intelligent application that allows you to ask questions about YouTube videos and get AI-powered answers based on the video's transcript.
 
 ## Features
 
-- Fetch YouTube video transcripts
-- Process and chunk transcripts for better context management
-- Create embeddings using the BGE model
-- Store and search through transcript chunks using FAISS
-- Generate answers to questions based on the video content
-- Save and load vector stores for later use
+- 🎥 **YouTube Video Processing**: Extract and process transcripts from any YouTube video
+- 🤖 **AI-Powered Q&A**: Ask questions and get intelligent answers using Groq's LLM
+- 💾 **Session Management**: Maintain conversation history during your session
+- 🔍 **Smart Search**: Find relevant content using vector similarity search
+- 📱 **Beautiful UI**: Modern, responsive interface built with Streamlit
 
-## Installation
+## How to Use
+
+1. **Enter a YouTube URL**: Paste any YouTube video URL in the input field
+2. **Process the Video**: Click "Process Video" to extract and analyze the transcript
+3. **Ask Questions**: Once processed, ask any question about the video content
+4. **View History**: Check your conversation history in the chat section
+
+## Setup
+
+### For Local Development
 
 1. Clone this repository
-2. Install the required dependencies:
-```bash
-pip install -r requirements.txt
-```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Create a `.env` file with your GROQ API key:
+   ```
+   GROQ_API_KEY=your_api_key_here
+   ```
+4. Run the application:
+   ```bash
+   streamlit run app.py
+   ```
 
-3. Create a `.env` file in the project root and add your Groq API key:
-```
-GROQ_API_KEY=your_groq_api_key_here
-```
+### For Hugging Face Spaces
 
-## Usage
+The application is configured to work with Hugging Face Spaces. Follow these steps:
 
-Here's a basic example of how to use the YouTube Transcript Processor:
+1. **Fork this repository** to your GitHub account
+2. **Create a new Space** on Hugging Face:
+   - Go to [huggingface.co/spaces](https://huggingface.co/spaces)
+   - Click "Create new Space"
+   - Choose "Streamlit" as the SDK
+   - Select your forked repository
+   - Choose "CPU" as the hardware
 
-```python
-from youtube_processor import YouTubeTranscriptProcessor
+3. **Add your GROQ API key**:
+   - In your Space settings, go to "Repository secrets"
+   - Add a new secret with key `GROQ_API_KEY` and your API key as the value
 
-# Initialize the processor
-processor = YouTubeTranscriptProcessor()
+4. **Deploy**: The Space will automatically build and deploy your application
 
-# Get and process a transcript
-video_id = "your_youtube_video_id"  # Replace with actual video ID
-transcript = processor.get_transcript(video_id)
-processor.process_transcript(transcript)
+## API Keys Required
 
-# Save the vector store for later use
-processor.save_vector_store("youtube_index")
+- **GROQ API Key**: Get your free API key from [console.groq.com](https://console.groq.com)
 
-# Search for relevant content
-query = "What is the main topic of the video?"
-search_results = processor.search(query)
+## Technologies Used
 
-# Generate an answer
-answer = processor.answer_question(query, search_results)
-print(f"Question: {query}")
-print(f"Answer: {answer}")
-```
+- **Streamlit**: Web application framework
+- **LangChain**: LLM framework for processing and Q&A
+- **Groq**: Fast LLM inference
+- **FAISS**: Vector similarity search
+- **YouTube Transcript API**: Video transcript extraction
+- **Sentence Transformers**: Text embeddings
 
-## Components
+## License
 
-1. **BGEEmbeddings**: A custom embedding class that uses the BGE model for creating text embeddings.
-2. **YouTubeTranscriptProcessor**: The main class that handles transcript processing, vector store creation, and question answering.
-
-## Requirements
-
-- Python 3.8+
-- See requirements.txt for all dependencies
-
-## Notes
-
-- The video must have English captions available
-- The Groq API key is required for question answering functionality
-- The vector store can be saved and loaded for later use, avoiding reprocessing of transcripts 
+MIT License - feel free to use and modify as needed! 

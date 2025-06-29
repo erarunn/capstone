@@ -5,26 +5,12 @@ from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, No
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
-from sentence_transformers import SentenceTransformer
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain_groq import ChatGroq
 
 # Load environment variables
 load_dotenv()
-
-class BGEEmbeddings(Embeddings):
-    """Custom LangChain-compatible Embedding class for BGE model."""
-    
-    def __init__(self):
-        self.model = SentenceTransformer("BAAI/bge-small-en-v1.5")
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        embeddings = self.model.encode(texts, normalize_embeddings=True)
-        return embeddings.tolist()
-
-    def embed_query(self, text: str) -> List[float]:
-        embedding = self.model.encode(text, normalize_embeddings=True)
-        return embedding.tolist()
 
 class YouTubeTranscriptProcessor:
     """A class to process YouTube video transcripts and create a searchable vector store."""
@@ -36,7 +22,12 @@ class YouTubeTranscriptProcessor:
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap
         )
-        self.embeddings = BGEEmbeddings()
+        # Initialize embeddings with a simpler configuration
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': True}
+        )
         self.vector_store = None
         self.llm = ChatGroq(
             groq_api_key=os.getenv("GROQ_API_KEY"),
@@ -121,7 +112,7 @@ def main():
     processor = YouTubeTranscriptProcessor()
     
     # Example video ID (replace with actual video ID)
-    video_id = "https://www.youtube.com/watch?v=AN-GpCxuSu4"#"https://www.youtube.com/watch?v=Gfr50f6ZBvo"  # Using full URL for better handling
+    video_id = "https://www.youtube.com/watch?v=Gfr50f6ZBvo"  # Using full URL for better handling
     
     try:
         # Get and process transcript
