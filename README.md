@@ -16,35 +16,35 @@
 
 ---
 
-
 A Streamlit-powered app that allows users to ask questions about **YouTube videos** by analyzing **subtitle transcripts** using **LLM + Vector Search**.
 
 ---
 
 ## 🚀 Features
 
-- 🎬 Extract subtitles from YouTube videos
-- ✂️ Chunk and index text with LangChain
-- 🔍 FAISS vector search powered by HuggingFace embeddings
-- 🤖 AI-generated answers via a hosted vLLM API
-- 💬 Full chat history stored per session
-- 🎨 Clean and responsive Streamlit UI
+- 🎬 Extract subtitles from YouTube videos  
+- ✂️ Chunk and index text with LangChain  
+- 🔍 FAISS vector search powered by HuggingFace embeddings  
+- 🤖 AI-generated answers via a hosted vLLM API  
+- 💬 Full chat history stored per session  
+- 🎨 Clean and responsive Streamlit UI  
+
 ---
 
 ## 🧠 How It Works
 
 ### ✅ Step-by-Step Flow
 
-1. **User enters a YouTube video URL**
-2. `yt_dlp` downloads the subtitle file in `.vtt` format (auto-generated or human-provided)
-3. Subtitles are parsed using `webvtt-py`
-4. The transcript is split into overlapping text chunks using LangChain’s `RecursiveCharacterTextSplitter`
-5. Chunks are embedded using HuggingFace's `all-MiniLM-L6-v2` model
-6. Vector search is set up using FAISS to find relevant chunks
-7. User submits a question → top-k relevant chunks are retrieved
-8. The context and question are sent to a **vLLM API endpoint**
-9. The answer is generated and returned to the UI
-10. Each interaction is saved to the session's **chat history**
+1. **User enters a YouTube video URL**  
+2. `yt_dlp` downloads the subtitle file in `.vtt` format (auto-generated or human-provided)  
+3. Subtitles are parsed using `webvtt-py`  
+4. The transcript is split into overlapping text chunks using LangChain’s `RecursiveCharacterTextSplitter`  
+5. Chunks are embedded using HuggingFace's `all-MiniLM-L6-v2` model  
+6. Vector search is set up using FAISS to find relevant chunks  
+7. User submits a question → top-k relevant chunks are retrieved  
+8. The context and question are sent to a **vLLM API endpoint**  
+9. The answer is generated and returned to the UI  
+10. Each interaction is saved to the session's **chat history**  
 
 ---
 
@@ -62,12 +62,3 @@ graph TD
     H --> I[🤖 Send Prompt to vLLM API]
     I --> J[💬 Display Answer in UI]
     J --> K[🕒 Save to Chat History]
-
----
-
-## 📦 Requirements
-
-Install required Python dependencies:
-
-```bash
-pip install -r requirements.txt
