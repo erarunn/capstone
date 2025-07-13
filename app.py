@@ -1,17 +1,33 @@
+import os
+import glob
+import subprocess
+import webvtt
+import requests
+import torch
+import asyncio
 import streamlit as st
-from youtube_processor import YouTubeTranscriptProcessor
 from datetime import datetime
-import base64
+from typing import List
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+import os
+os.environ["STREAMLIT_WATCHER_TYPE"] = "none"
+from yt_dlp import YoutubeDL
 
-# Page configuration
-st.set_page_config(
-    page_title="YouTube Video Q&A System",
-    page_icon="🎥",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# === PyTorch / Windows fix ===
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
-# Custom CSS for better styling
+# === Hosted LLM endpoint ===
+VLLM_API = "https://df2a88d5ef78.ngrok-free.app/generate"
+
+# === Streamlit UI config ===
+st.set_page_config(page_title="🎥 YouTube Video Q&A", page_icon="🎬", layout="wide")
+
+# === CSS Styling ===
 st.markdown("""
 <style>
     .main-header {
@@ -25,36 +41,11 @@ st.markdown("""
         color: white;
         font-size: 3rem;
         margin: 0;
-        font-weight: bold;
     }
     .main-header p {
         color: rgba(255,255,255,0.9);
         font-size: 1.2rem;
-        margin: 0.5rem 0 0 0;
-    }
-    .feature-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        margin: 1rem 0;
-        border-left: 4px solid #667eea;
-    }
-    .success-message {
-        background: linear-gradient(90deg, #4CAF50, #45a049);
-        color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        text-align: center;
-        font-weight: bold;
-    }
-    .error-message {
-        background: linear-gradient(90deg, #f44336, #da190b);
-        color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        text-align: center;
-        font-weight: bold;
+        margin: 0.5rem 0 0;
     }
     .chat-message {
         background: #f8f9fa;
@@ -63,19 +54,6 @@ st.markdown("""
         margin: 0.5rem 0;
         border-left: 4px solid #007bff;
     }
-    .stButton > button {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 0.5rem 2rem;
-        border-radius: 25px;
-        font-weight: bold;
-        transition: all 0.3s ease;
-    }
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
     .input-container {
         background: white;
         padding: 2rem;
@@ -83,178 +61,170 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         margin: 1rem 0;
     }
+    .stButton > button {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 0.5rem 2rem;
+        border-radius: 25px;
+        font-weight: bold;
+    }
+    .stButton > button:hover {
+        transform: scale(1.03);
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state for processor
-if 'processor' not in st.session_state:
-    st.session_state.processor = YouTubeTranscriptProcessor()
+# === Pipeline class ===
+class YouTubeRAGPipeline:
+    def __init__(self):
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"},
+            encode_kwargs={"normalize_embeddings": True}
+        )
+        self.splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+        self.vector_store = None
 
-# Initialize session state for chat history
-if 'chat_history' not in st.session_state:
+    def fetch_transcript(self, video_url: str, lang_code: str = "en") -> str:
+        for f in glob.glob("*.vtt"):
+            os.remove(f)
+
+        ydl_opts = {
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': [lang_code],
+            'skip_download': True,
+            'outtmpl': '%(id)s.%(ext)s',
+            'quiet': True,
+            'nocheckcertificate': True,
+        }
+
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                ydl.download([video_url])
+        except Exception as e:
+            raise Exception(f"❌ yt-dlp failed: {str(e)}")
+
+        vtt_files = glob.glob(f"*.{lang_code}.vtt")
+        if not vtt_files:
+            raise Exception("❌ No subtitles found.")
+
+        transcript = ""
+        for caption in webvtt.read(vtt_files[0]):
+            transcript += caption.text.strip() + " "
+        return transcript.strip()
+
+    def _read_vtt(self, file_path: str) -> str:
+        return " ".join([caption.text.strip() for caption in webvtt.read(file_path)]).strip()
+
+    def process_transcript(self, text: str):
+        docs = self.splitter.create_documents([text])
+        self.vector_store = FAISS.from_documents(docs, embedding=self.embeddings)
+
+    def search(self, query: str, k: int = 4) -> List[str]:
+        retriever = self.vector_store.as_retriever(search_type="similarity", search_kwargs={"k": k})
+        return [doc.page_content for doc in retriever.invoke(query)]
+
+    def generate_answer(self, context: List[str], question: str) -> str:
+        context_str = "\n".join(context)
+        prompt = f"""<s>[INST] Answer the following question using the context. If the answer is unknown, say you don't know.\n\nContext:\n{context_str}\n\nQuestion:\n{question}\n\nAnswer: [/INST]"""
+        try:
+            response = requests.post(VLLM_API, json={"prompt": prompt}, timeout=30)
+            response.raise_for_status()
+            return response.json().get("response", "").strip()
+        except Exception as e:
+            return f"❌ Error from vLLM: {str(e)}"
+
+# === App State ===
+if "rag_pipeline" not in st.session_state:
+    st.session_state.rag_pipeline = YouTubeRAGPipeline()
+if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-
-# Initialize session state for processed video
-if 'current_video' not in st.session_state:
+if "current_video" not in st.session_state:
     st.session_state.current_video = None
 
-def process_video(video_url: str) -> bool:
-    """Process a YouTube video and return success status."""
-    try:
-        transcript = st.session_state.processor.get_transcript(video_url)
-        st.session_state.processor.process_transcript(transcript)
-        st.session_state.current_video = video_url
-        return True
-    except Exception as e:
-        st.error(f"Error processing video: {str(e)}")
-        return False
-
-def ask_question(video_url: str, question: str) -> str:
-    """Ask a question about the video and return the answer."""
-    try:
-        if video_url != st.session_state.current_video:
-            # Reprocess the video if it's different from the current one
-            transcript = st.session_state.processor.get_transcript(video_url)
-            st.session_state.processor.process_transcript(transcript)
-            st.session_state.current_video = video_url
-        
-        # Search for relevant context
-        search_results = st.session_state.processor.search(question)
-        
-        # Generate answer
-        answer = st.session_state.processor.answer_question(question, search_results)
-        return answer
-    except Exception as e:
-        st.error(f"Error getting answer: {str(e)}")
-        return None
-
-def add_to_chat_history(video_url: str, question: str, answer: str):
-    """Add interaction to chat history."""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    st.session_state.chat_history.append({
-        "timestamp": timestamp,
-        "video_url": video_url,
-        "question": question,
-        "answer": answer
-    })
-
-# Main header
+# === Header ===
 st.markdown("""
 <div class="main-header">
-    <h1>🎥 YouTube Video Q&A System</h1>
-    <p>Ask intelligent questions about any YouTube video and get AI-powered answers</p>
+    <h1>🎥 YouTube Video Q&A</h1>
+    <p>Ask questions about YouTube videos using transcripts + vLLM AI</p>
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar for features
+# === Sidebar ===
 with st.sidebar:
-    st.markdown("### ✨ Features")
-    st.markdown("""
-    - 🎯 **Smart Video Processing**
-    - 🤖 **AI-Powered Q&A**
-    - 💾 **Session History**
-    - 🔍 **Vector Search**
-    - 📱 **Responsive Design**
-    """)
-    
-    st.markdown("### 🚀 How to Use")
-    st.markdown("""
-    1. Paste YouTube URL
-    2. Click Process Video
-    3. Ask Questions
-    4. View History
-    """)
-    
-    # Clear history button in sidebar
-    if st.button("🗑️ Clear Chat History", key="clear_sidebar"):
+    st.header("🧠 Features")
+    st.markdown("- Subtitle extraction\n- Vector-based search\n- AI answers\n- Full chat history")
+    if st.button("🗑️ Clear Chat History"):
         st.session_state.chat_history = []
-        st.success("Chat history cleared!")
+        st.success("History cleared.")
 
-# Main content area
+# === Main Columns ===
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    # Video processing section
-    st.markdown("### 📹 Video Processing")
-    with st.container():
-        st.markdown('<div class="input-container">', unsafe_allow_html=True)
-        video_url = st.text_input(
-            "Enter YouTube Video URL:",
-            placeholder="https://www.youtube.com/watch?v=...",
-            help="Paste any YouTube video URL here"
-        )
-        
-        col_process1, col_process2 = st.columns([1, 3])
-        with col_process1:
-            if st.button("🚀 Process Video", key="process_btn"):
-                if video_url:
-                    with st.spinner("🔄 Processing video transcript..."):
-                        if process_video(video_url):
-                            st.markdown('<div class="success-message">✅ Video processed successfully!</div>', unsafe_allow_html=True)
-                        else:
-                            st.markdown('<div class="error-message">❌ Failed to process video.</div>', unsafe_allow_html=True)
-                else:
-                    st.warning("⚠️ Please enter a YouTube video URL.")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Video processing
+    st.subheader("📹 Process YouTube Video")
+    st.markdown('<div class="input-container">', unsafe_allow_html=True)
+    video_url = st.text_input("YouTube URL", placeholder="https://www.youtube.com/watch?v=...")
+    if st.button("🚀 Process Video"):
+        if video_url:
+            with st.spinner("Fetching transcript..."):
+                try:
+                    transcript = st.session_state.rag_pipeline.fetch_transcript(video_url)
+                    st.session_state.rag_pipeline.process_transcript(transcript)
+                    st.session_state.current_video = video_url
+                    st.success("✅ Transcript processed!")
+                except Exception as e:
+                    st.error(str(e))
+        else:
+            st.warning("Please enter a valid video URL.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Question asking section
-    st.markdown("### ❓ Ask Questions")
-    with st.container():
-        st.markdown('<div class="input-container">', unsafe_allow_html=True)
-        question = st.text_input(
-            "Ask a question about the video:",
-            placeholder="What is the main topic of the video?",
-            help="Ask any question about the video content"
-        )
-        
-        col_ask1, col_ask2 = st.columns([1, 3])
-        with col_ask1:
-            if st.button("🤖 Ask Question", key="ask_btn"):
-                if video_url and question:
-                    with st.spinner("🧠 Generating answer..."):
-                        answer = ask_question(video_url, question)
-                        if answer:
-                            st.markdown("### 💡 Answer:")
-                            st.markdown(f'<div class="chat-message">{answer}</div>', unsafe_allow_html=True)
-                            add_to_chat_history(video_url, question, answer)
-                else:
-                    st.warning("⚠️ Please enter both a video URL and a question.")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Question asking
+    st.subheader("❓ Ask a Question")
+    st.markdown('<div class="input-container">', unsafe_allow_html=True)
+    question = st.text_input("Your question", placeholder="What is the video about?")
+    if st.button("🤖 Get Answer"):
+        if not video_url or not question:
+            st.warning("Provide both video URL and question.")
+        else:
+            with st.spinner("Thinking..."):
+                try:
+                    if video_url != st.session_state.current_video:
+                        transcript = st.session_state.rag_pipeline.fetch_transcript(video_url)
+                        st.session_state.rag_pipeline.process_transcript(transcript)
+                        st.session_state.current_video = video_url
+                    context = st.session_state.rag_pipeline.search(question)
+                    answer = st.session_state.rag_pipeline.generate_answer(context, question)
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    st.session_state.chat_history.append({
+                        "timestamp": timestamp,
+                        "video_url": video_url,
+                        "question": question,
+                        "answer": answer
+                    })
+                    st.success("✅ Answer:")
+                    st.markdown(f'<div class="chat-message">{answer}</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"❌ {str(e)}")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
-    # Current status
-    st.markdown("### 📊 Current Status")
+    st.subheader("📊 Status")
     if st.session_state.current_video:
-        st.success("✅ Video Ready")
-        st.info(f"📹 Current Video: {st.session_state.current_video[:50]}...")
+        st.success("Video loaded")
+        st.code(st.session_state.current_video[:60] + "...")
     else:
-        st.warning("⚠️ No video processed")
-    
-    # Chat history count
-    st.metric("💬 Chat History", len(st.session_state.chat_history))
+        st.warning("No video loaded yet")
+    st.metric("💬 Questions Asked", len(st.session_state.chat_history))
 
-# Chat history section
-st.markdown("### 📚 Chat History")
+# === Chat History ===
+st.subheader("📚 Chat History")
 if st.session_state.chat_history:
-    for i, entry in enumerate(reversed(st.session_state.chat_history)):
-        with st.expander(f"🗓️ {entry['timestamp']} - {entry['question'][:50]}...", expanded=False):
-            col_hist1, col_hist2 = st.columns([1, 3])
-            with col_hist1:
-                st.markdown("**📹 Video:**")
-                st.code(entry['video_url'][:50] + "...")
-            with col_hist2:
-                st.markdown("**❓ Question:**")
-                st.markdown(f'<div class="chat-message">{entry["question"]}</div>', unsafe_allow_html=True)
-                st.markdown("**💡 Answer:**")
-                st.markdown(f'<div class="chat-message">{entry["answer"]}</div>', unsafe_allow_html=True)
-else:
-    st.info("📝 No chat history yet. Process a video and ask questions to see your history here.")
-
-# Footer
-st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #666; padding: 1rem;'>
-    <p>Built with ❤️ using Streamlit, LangChain, and Groq</p>
-    <p>🎥 YouTube Video Q&A System</p>
-</div>
-""", unsafe_allow_html=True) 
+    for entry in reversed(st.session_state.chat_history):
+        with st.expander(f"🗓️ {entry['timestamp']} — {entry['question'][:40]}..."):
+            st.markdown("**Video:**")
+            st.code(entry["video_url"][:70] + "...")
+           

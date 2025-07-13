@@ -1,71 +1,73 @@
-# YouTube Video Q&A System
+# 🎥 YouTube Video Q&A App
 
-An intelligent application that allows you to ask questions about YouTube videos and get AI-powered answers based on the video's transcript.
+[![CI](https://github.com/your-username/your-repo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/your-repo/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/github/downloads/your-username/your-repo/total?label=Downloads)](https://github.com/your-username/your-repo/releases)
+[![License](https://img.shields.io/github/license/your-username/your-repo)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/your-username/your-repo?style=social)](https://github.com/your-username/your-repo/stargazers)
 
-## Features
+[![Discord](https://img.shields.io/discord/123456789012345678?color=5865F2&label=Join%20Discord&logo=discord&logoColor=white)](https://discord.gg/your-server)
+[![Discussions](https://img.shields.io/badge/Discussions-Forum-blue)](https://github.com/your-username/your-repo/discussions)
+[![Reddit](https://img.shields.io/reddit/subreddit-subscribers/YourSubreddit?style=social)](https://www.reddit.com/r/YourSubreddit/)
 
-- 🎥 **YouTube Video Processing**: Extract and process transcripts from any YouTube video
-- 🤖 **AI-Powered Q&A**: Ask questions and get intelligent answers using Groq's LLM
-- 💾 **Session Management**: Maintain conversation history during your session
-- 🔍 **Smart Search**: Find relevant content using vector similarity search
-- 📱 **Beautiful UI**: Modern, responsive interface built with Streamlit
+[![Run on Gradient](https://img.shields.io/badge/Run_on-Gradient-blue?logo=paperspace)](https://gradient.paperspace.com/)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/your-repo/blob/main/app.ipynb)
+[![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://www.kaggle.com/kernels)
+[![Open in Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/your-username/your-repo/HEAD)
 
-## How to Use
+---
 
-1. **Enter a YouTube URL**: Paste any YouTube video URL in the input field
-2. **Process the Video**: Click "Process Video" to extract and analyze the transcript
-3. **Ask Questions**: Once processed, ask any question about the video content
-4. **View History**: Check your conversation history in the chat section
 
-## Setup
+A Streamlit-powered app that allows users to ask questions about **YouTube videos** by analyzing **subtitle transcripts** using **LLM + Vector Search**.
 
-### For Local Development
+---
 
-1. Clone this repository
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Create a `.env` file with your GROQ API key:
-   ```
-   GROQ_API_KEY=your_api_key_here
-   ```
-4. Run the application:
-   ```bash
-   streamlit run app.py
-   ```
+## 🚀 Features
 
-### For Hugging Face Spaces
+- 🎬 Extract subtitles from YouTube videos
+- ✂️ Chunk and index text with LangChain
+- 🔍 FAISS vector search powered by HuggingFace embeddings
+- 🤖 AI-generated answers via a hosted vLLM API
+- 💬 Full chat history stored per session
+- 🎨 Clean and responsive Streamlit UI
+---
 
-The application is configured to work with Hugging Face Spaces. Follow these steps:
+## 🧠 How It Works
 
-1. **Fork this repository** to your GitHub account
-2. **Create a new Space** on Hugging Face:
-   - Go to [huggingface.co/spaces](https://huggingface.co/spaces)
-   - Click "Create new Space"
-   - Choose "Streamlit" as the SDK
-   - Select your forked repository
-   - Choose "CPU" as the hardware
+### ✅ Step-by-Step Flow
 
-3. **Add your GROQ API key**:
-   - In your Space settings, go to "Repository secrets"
-   - Add a new secret with key `GROQ_API_KEY` and your API key as the value
+1. **User enters a YouTube video URL**
+2. `yt_dlp` downloads the subtitle file in `.vtt` format (auto-generated or human-provided)
+3. Subtitles are parsed using `webvtt-py`
+4. The transcript is split into overlapping text chunks using LangChain’s `RecursiveCharacterTextSplitter`
+5. Chunks are embedded using HuggingFace's `all-MiniLM-L6-v2` model
+6. Vector search is set up using FAISS to find relevant chunks
+7. User submits a question → top-k relevant chunks are retrieved
+8. The context and question are sent to a **vLLM API endpoint**
+9. The answer is generated and returned to the UI
+10. Each interaction is saved to the session's **chat history**
 
-4. **Deploy**: The Space will automatically build and deploy your application
+---
 
-## API Keys Required
+### 🔁 Pipeline Flow Diagram
 
-- **GROQ API Key**: Get your free API key from [console.groq.com](https://console.groq.com)
+```mermaid
+graph TD
+    A[🎥 User Inputs YouTube URL] --> B[📥 yt_dlp: Download Subtitles]
+    B --> C[📝 webvtt: Parse VTT File]
+    C --> D[✂️ LangChain: Chunk Transcript]
+    D --> E[🔢 HuggingFace: Generate Embeddings]
+    E --> F[📚 FAISS: Store & Search Vectors]
+    
+    G[❓ User Asks Question] --> H[🔍 Retrieve Top-k Chunks from FAISS]
+    H --> I[🤖 Send Prompt to vLLM API]
+    I --> J[💬 Display Answer in UI]
+    J --> K[🕒 Save to Chat History]
 
-## Technologies Used
+---
 
-- **Streamlit**: Web application framework
-- **LangChain**: LLM framework for processing and Q&A
-- **Groq**: Fast LLM inference
-- **FAISS**: Vector similarity search
-- **YouTube Transcript API**: Video transcript extraction
-- **Sentence Transformers**: Text embeddings
+## 📦 Requirements
 
-## License
+Install required Python dependencies:
 
-MIT License - feel free to use and modify as needed! 
+```bash
+pip install -r requirements.txt

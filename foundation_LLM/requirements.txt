@@ -1,0 +1,23 @@
+# Core Deep Learning Libraries
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Hugging Face Ecosystem
+transformers>=4.40.0
+datasets>=2.18.0
+
+# Optional for FP16/bfloat16 training support
+accelerate>=0.24.0
+
+# For using Google Colab (if running in notebooks)
+# (Not necessary to include if running locally or on servers)
+
+# For safe serialization of checkpoints across devices
+protobuf>=3.20.3
+
+# Optional if planning to use model compilation (for PyTorch 2+)
+# torch.compile requires torch 2.0+ and may require specific Python versions
+
+# General
+tqdm>=4.66.0
