@@ -50,6 +50,7 @@ A Streamlit-powered app that allows users to ask questions about **YouTube video
 
 ### 🔁 Pipeline Flow Diagram
 
+```mermaid
 graph TD
     A[🎥 User Inputs YouTube URL] --> B[📥 yt_dlp: Download Subtitles]
     B --> C[📝 webvtt: Parse VTT File]
